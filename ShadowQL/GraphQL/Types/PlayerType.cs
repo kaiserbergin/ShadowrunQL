@@ -1,16 +1,16 @@
-﻿using GraphQL.Types;
+﻿using GraphQL.DataLoader;
+using GraphQL.Types;
 using ShadowQL.Models;
 using ShadowQL.Repositories;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace ShadowQL.GraphQL.Types
 {
     public class PlayerType: ObjectGraphType<Player>
     {
-        public PlayerType(PlayerRepository playerRepository, CharacterRepository characterRepository)
+        public PlayerType(
+            CharacterRepository characterRepository,
+            IDataLoaderContextAccessor dataLoaderAccessor    
+        )
         {
             Field(t => t.Id);
             Field(t => t.FirstName).Description("Player's First Name");
@@ -18,7 +18,17 @@ namespace ShadowQL.GraphQL.Types
 
             Field<ListGraphType<CharacterType>>(
                 "characters",
-                resolve: context => characterRepository.GetForPlayer(context.Source.Id)
+                resolve: context => {
+                    // N+1 Issue:
+                    //return characterRepository.GetForPlayer(context.Source.Id);
+
+                    // Chached data Loader:
+                    var loader = dataLoaderAccessor
+                        .Context
+                        .GetOrAddCollectionBatchLoader<long, Character>("GetCharactersByPlayerId", characterRepository.GetForPlayers);
+
+                    return loader.LoadAsync(context.Source.Id);
+                }
             );
         }
     }

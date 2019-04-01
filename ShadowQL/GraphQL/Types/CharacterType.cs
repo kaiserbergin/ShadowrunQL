@@ -1,15 +1,13 @@
-﻿using GraphQL.Types;
+﻿using GraphQL.DataLoader;
+using GraphQL.Types;
 using ShadowQL.Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using ShadowQL.Repositories;
 
 namespace ShadowQL.GraphQL.Types
 {
     public class CharacterType: ObjectGraphType<Character> 
     {
-        public CharacterType()
+        public CharacterType(MetaTypeRepository metaTypeRepository, IDataLoaderContextAccessor dataAccessLoader)
         {
             Field(t => t.Id);
             Field(t => t.PlayerId).Description("IRL player who owns this character.");
@@ -28,6 +26,19 @@ namespace ShadowQL.GraphQL.Types
             Field(t => t.Essence, nullable: true).Description("The anchor for your soul to this mortal coil.");
             Field(t => t.Karma, nullable: true).Description("Reflects the impact you've had on the world, and how much you should get back - unless you get fragged first.");
             Field(t => t.KarmaBalance, nullable: true).Description("What you've got in your celestial karma account.  Not everyone makes a withdrawl, though.");
+
+            Field<StringGraphType>(
+                 "metatype",
+                 resolve: context => {
+                     // N + 1 issue approach returning a field from a complex type as if it was a string:
+                     //return metaTypeRepository.GetMetaTypeAsString(context.Source.Metatype);
+
+                     // Data loader approach 
+                     var loader = dataAccessLoader.Context.GetOrAddCollectionBatchLoader<int, string>("GetMetatypesAsStringById", metaTypeRepository.GetMetatypesAsStrings);
+                     return context.Source.Metatype != null ? loader.LoadAsync((int)context.Source.Metatype) : null;
+                 },
+                 description: "Your type."
+             );
         }
     }
 }
